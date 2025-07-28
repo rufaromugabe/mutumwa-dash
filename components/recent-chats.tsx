@@ -1,153 +1,143 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-
-const recentChats = [
-  {
-    user: "Tendai M.",
-    message: "Ndiri kutsvaga ruzivo nezve maapplication kuHIT",
-    time: "2m ago",
-    language: "Shona",
-    status: "active",
-  },
-  {
-    user: "Chipo N.",
-    message: "Maita basa, ndanzwisisa marequirements eSoftware Engineering",
-    time: "7m ago",
-    language: "Shona",
-    status: "resolved",
-  },
-  {
-    user: "Blessing M.",
-    message: "Ngifuna ukwazi ukuthi yiziphi izifundo ezitholakala for Computer Science",
-    time: "15m ago",
-    language: "Ndebele",
-    status: "active",
-  },
-  {
-    user: "Grace S.",
-    message: "Can you help me understand the difference between HIT and other polytechnics?",
-    time: "22m ago",
-    language: "English",
-    status: "pending",
-  },
-  {
-    user: "Kuda T.",
-    message: "How much is the tuition fee for first-year students?",
-    time: "30m ago",
-    language: "English",
-    status: "active",
-  },
-  {
-    user: "Lerato M.",
-    message: "Kune accommodation here yemadzimai pedyo necampus?",
-    time: "38m ago",
-    language: "Shona",
-    status: "pending",
-  },
-  {
-    user: "Nokuthula D.",
-    message: "Ngabe ngidinga iMaths ukuze ngifake iSoftware Engineering?",
-    time: "45m ago",
-    language: "Ndebele",
-    status: "resolved",
-  },
-  {
-    user: "Tatenda Z.",
-    message: "I got 10 points at A-Level, can I qualify for Industrial Design?",
-    time: "53m ago",
-    language: "English",
-    status: "pending",
-  },
-  {
-    user: "Fadzai K.",
-    message: "Marii inodiwa pakunyoresa first semester?",
-    time: "1h ago",
-    language: "Shona",
-    status: "active",
-  },
-  {
-    user: "Tafadzwa B.",
-    message: "Ndinoda kuziva kana HIT ichipa part-time courses futi",
-    time: "1h 15m ago",
-    language: "Shona",
-    status: "pending",
-  },
-  {
-    user: "Amanda N.",
-    message: "How do I apply as an international student?",
-    time: "1h 45m ago",
-    language: "English",
-    status: "active",
-  },
-  {
-    user: "Sibongile M.",
-    message: "Ngifuna ukufunda ngeScholarships available eHIT",
-    time: "2h ago",
-    language: "Ndebele",
-    status: "resolved",
-  },
-  {
-    user: "Brian G.",
-    message: "Can I change my program after registration?",
-    time: "2h 30m ago",
-    language: "English",
-    status: "pending",
-  },
-  {
-    user: "Rutendo J.",
-    message: "Pane orientation here ye first years? Ingori riini?",
-    time: "3h ago",
-    language: "Shona",
-    status: "active",
-  },
-  {
-    user: "Nomusa P.",
-    message: "Ngabe uHIT une facilities ezinhle zeLibrary naLab?",
-    time: "3h 20m ago",
-    language: "Ndebele",
-    status: "resolved",
-  },
-]
+import { useEffect, useState } from "react";
+import { Session } from "@/interfaces/sessions";
+import { Message, MessagesResponse } from "@/interfaces";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 export function RecentChats() {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-500"
-      case "pending":
-        return "bg-yellow-500"
-      case "resolved":
-        return "bg-blue-500"
-      default:
-        return "bg-gray-500"
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
+    try {
+      const response = await fetch("/api/sessions");
+      if (!response.ok) throw new Error("Failed to fetch sessions");
+      const data = await response.json();
+      setSessions(data.sessions);
+    } catch (error) {
+      console.error("Error fetching sessions:", error);
+      setSessions([]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const openSession = async (session: Session) => {
+    setSelectedSession(session);
+    setMessagesLoading(true);
+    try {
+      const response = await fetch(`/api/chats?sessionId=${session.id}`);
+      if (!response.ok) throw new Error("Failed to fetch messages");
+      const data: MessagesResponse = await response.json();
+      // Sort messages by created_at ascending
+      setMessages(
+        data.messages.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+      );
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      setMessages([]);
+    } finally {
+      setMessagesLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8 text-slate-400">Loading sessions...</div>
+    );
+  }
+
+  if (selectedSession) {
+    return (
+      <div>
+        <button
+          className="mb-4 text-blue-400 underline"
+          onClick={() => setSelectedSession(null)}
+        >
+          ← Back to sessions
+        </button>
+        <h2 className="text-xl font-bold mb-2 text-white">
+          {selectedSession.metadata?.name || `Chat${selectedSession.id}`}
+        </h2>
+        {messagesLoading ? (
+          <div className="text-slate-400">Loading messages...</div>
+        ) : messages.length === 0 ? (
+          <div className="text-slate-400">No messages in this chat.</div>
+        ) : (
+          <div className="space-y-4">
+            {messages.map((msg, idx) => (
+              <div
+                key={msg.uuid}
+                className={`flex ${
+                  idx % 2 === 0 ? "justify-start" : "justify-end"
+                }`}
+              >
+                <div className="max-w-md p-3 rounded-lg bg-slate-700 text-white">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <Badge
+                      variant="outline"
+                      className="text-xs border-slate-600"
+                    >
+                      {msg.role}
+                    </Badge>
+                    <span className="text-xs text-slate-400">
+                      {new Date(msg.created_at).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div>{msg.content}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
-      {recentChats.map((chat, index) => (
-        <div key={index} className="flex items-start space-x-3">
-          <Avatar className="w-8 h-8">
-            <AvatarFallback className="bg-blue-500 text-white text-xs">
-              {chat.user
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2">
-              <p className="text-sm font-medium text-white">{chat.user}</p>
-              <Badge variant="outline" className="text-xs text-slate-400 border-slate-600">
-                {chat.language}
-              </Badge>
-              <div className={`w-2 h-2 rounded-full ${getStatusColor(chat.status)}`} />
-            </div>
-            <p className="text-sm text-slate-400 truncate">{chat.message}</p>
-            <p className="text-xs text-slate-500">{chat.time}</p>
-          </div>
+      {sessions.length === 0 ? (
+        <div className="text-center py-8 text-slate-400">
+          No recent conversations
         </div>
-      ))}
+      ) : (
+        sessions.map((session, idx) => (
+          <div
+            key={session.id}
+            className="flex items-start space-x-3 cursor-pointer hover:bg-slate-700 p-2 rounded"
+            onClick={() => openSession(session)}
+          >
+            <Avatar className="w-8 h-8">
+              <AvatarFallback className="bg-blue-500 text-white text-xs">
+                {(session.metadata?.name || `Chat${idx + 1}`)
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-2">
+                <p className="text-sm font-medium text-white">
+                  {session.metadata?.name || `Chat${idx + 1}`}
+                </p>
+              </div>
+              <p className="text-xs text-slate-500">
+                Created: {new Date(session.created_at).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        ))
+      )}
     </div>
-  )
+  );
 }

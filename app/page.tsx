@@ -1,30 +1,30 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { SidebarProvider } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { DashboardContent } from "@/components/dashboard-content"
-import { ChatManagement } from "@/components/chat-management"
-import { Analytics } from "@/components/analytics"
-import { Settings } from "@/components/settings"
+import { useState } from "react";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { DashboardContent } from "@/components/dashboard-content";
+import { ChatManagement } from "@/components/chat-management";
+import { AnalyticsDashboard } from "@/components/analytics";
+import { Settings } from "@/components/settings";
 
 export default function Dashboard() {
-  const [activeView, setActiveView] = useState("dashboard")
+  const [activeView, setActiveView] = useState("dashboard");
 
   const renderContent = () => {
     switch (activeView) {
       case "dashboard":
-        return <DashboardContent />
+        return <DashboardContent />;
       case "chats":
-        return <ChatManagement />
+        return <ChatManagement />;
       case "analytics":
-        return <Analytics />
+        return <AnalyticsDashboard />;
       case "settings":
-        return <Settings />
+        return <Settings />;
       default:
-        return <DashboardContent />
+        return <DashboardContent />;
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-[#1a1f3a]">
@@ -33,5 +33,5 @@ export default function Dashboard() {
         <main className="flex-1 p-6">{renderContent()}</main>
       </SidebarProvider>
     </div>
-  )
+  );
 }
