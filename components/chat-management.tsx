@@ -1,112 +1,113 @@
+"use client";
+
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, MessageSquare, User, Clock } from "lucide-react";
+import {
+  Search,
+  MessageSquare,
+  User,
+  Clock,
+  Bot,
+  Copy,
+  Check,
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import { Message } from "@/interfaces";
-
-interface ChatSession {
-  id: string;
-  user: string;
-  role: string;
-  status: string;
-  lastMessage: string;
-  timestamp: string;
-  messages: number;
-}
+import type { Session } from "@/interfaces/sessions";
+import type { Message, MessagesResponse } from "@/interfaces";
 
 export function ChatManagement() {
-  const [chats, setChats] = useState<ChatSession[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchChats();
+    fetchSessions();
   }, []);
 
-  const fetchChats = async () => {
+  const fetchSessions = async () => {
     try {
-      const response = await fetch("/api/chats");
-      if (!response.ok) {
-        throw new Error("Failed to fetch chats");
-      }
+      const response = await fetch("/api/sessions");
+      if (!response.ok) throw new Error("Failed to fetch sessions");
       const data = await response.json();
-
-      // Transform the messages data into chat sessions
-      const chatSessions = transformMessagesToChatSessions(data.messages);
-      setChats(chatSessions);
+      setSessions(data.sessions);
     } catch (error) {
-      console.error("Error fetching chats:", error);
-      // Fallback to demo data if API fails
-      setChats(demoChats);
+      console.error("Error fetching sessions:", error);
+      setSessions([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const transformMessagesToChatSessions = (
-    messages: Message[]
-  ): ChatSession[] => {
-    // Group messages by session (you might need to adjust this based on your data structure)
-    const sessions = new Map<string, Message[]>();
-
-    messages.forEach((message) => {
-      // For now, we'll create sessions based on role_type
-      const sessionKey = message.role_type;
-      if (!sessions.has(sessionKey)) {
-        sessions.set(sessionKey, []);
-      }
-      sessions.get(sessionKey)!.push(message);
-    });
-
-    return Array.from(sessions.entries()).map(
-      ([sessionKey, sessionMessages], index) => {
-        const lastMessage = sessionMessages[sessionMessages.length - 1];
-        const firstMessage = sessionMessages[0];
-
-        // Determine status based on message count and timing
-        let status = "active";
-        if (sessionMessages.length > 10) {
-          status = "resolved";
-        } else if (sessionMessages.length < 3) {
-          status = "pending";
-        }
-
-        return {
-          id: sessionKey + index,
-          user: `User ${index + 1}`,
-          role: lastMessage.role,
-          status,
-          lastMessage:
-            lastMessage.content.substring(0, 50) +
-            (lastMessage.content.length > 50 ? "..." : ""),
-          timestamp: formatTimestamp(lastMessage.created_at),
-          messages: sessionMessages.length,
-        };
-      }
-    );
+  const openSession = async (session: Session) => {
+    setSelectedSession(session);
+    setMessagesLoading(true);
+    try {
+      const response = await fetch(`/api/chats?sessionId=${session.id}`);
+      if (!response.ok) throw new Error("Failed to fetch messages");
+      const data: MessagesResponse = await response.json();
+      setMessages(
+        data.messages.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+      );
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      setMessages([]);
+    } finally {
+      setMessagesLoading(false);
+    }
   };
 
-  const formatTimestamp = (timestamp: string): string => {
+  const copyMessage = async (content: string, messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (error) {
+      console.error("Failed to copy message:", error);
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
     const now = new Date();
-    const messageTime = new Date(timestamp);
-    const diffInMinutes = Math.floor(
-      (now.getTime() - messageTime.getTime()) / (1000 * 60)
-    );
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
-    if (diffInMinutes < 1) return "Just now";
-    if (diffInMinutes < 60) return `${diffInMinutes} minutes ago`;
-    if (diffInMinutes < 1440)
-      return `${Math.floor(diffInMinutes / 60)} hours ago`;
-    return `${Math.floor(diffInMinutes / 1440)} days ago`;
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } else if (diffInHours < 168) {
+      // 7 days
+      return date.toLocaleDateString([], {
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } else {
+      return date.toLocaleDateString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
   };
 
-  const filteredChats = chats.filter(
-    (chat) =>
-      chat.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      chat.lastMessage.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      chat.role.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredSessions = sessions.filter(
+    (session) =>
+      (session.metadata?.name || `Chat${session.id}`)
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      session.user_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getStatusColor = (status: string) => {
@@ -152,6 +153,167 @@ export function ChatManagement() {
     );
   }
 
+  if (selectedSession) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <button
+            className="flex items-center space-x-2 text-blue-400 hover:text-blue-300 transition-colors"
+            onClick={() => setSelectedSession(null)}
+          >
+            <span>←</span>
+            <span>Back to sessions</span>
+          </button>
+          <div className="flex items-center space-x-2">
+            <Badge
+              variant="outline"
+              className="text-slate-300 border-slate-600"
+            >
+              {messages.length} messages
+            </Badge>
+          </div>
+        </div>
+
+        <Card className="bg-slate-800 border-slate-700">
+          <CardHeader className="border-b border-slate-700">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-white">
+                  {selectedSession.metadata?.name ||
+                    `Chat ${selectedSession.id}`}
+                </h2>
+                <p className="text-sm text-slate-400">
+                  Started {formatTime(selectedSession.created_at)}
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            <div className="h-[600px] overflow-y-auto">
+              {messagesLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="flex items-center space-x-2 text-slate-400">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                    <span>Loading messages...</span>
+                  </div>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <MessageSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">
+                      No messages in this chat yet.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1 p-4">
+                  {messages.map((msg, idx) => {
+                    const isUser = msg.role === "Human";
+                    const isConsecutive =
+                      idx > 0 && messages[idx - 1].role === msg.role;
+
+                    return (
+                      <div
+                        key={msg.uuid}
+                        className={`flex ${
+                          isUser ? "justify-end" : "justify-start"
+                        } ${isConsecutive ? "mt-1" : "mt-4"}`}
+                      >
+                        <div
+                          className={`flex items-end space-x-2 max-w-[80%] ${
+                            isUser
+                              ? "flex-row-reverse space-x-reverse"
+                              : "flex-row"
+                          }`}
+                        >
+                          {/* Avatar */}
+                          {!isConsecutive && (
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                isUser ? "bg-blue-500" : "bg-slate-600"
+                              }`}
+                            >
+                              {isUser ? (
+                                <User className="w-4 h-4 text-white" />
+                              ) : (
+                                <Bot className="w-4 h-4 text-white" />
+                              )}
+                            </div>
+                          )}
+                          {isConsecutive && <div className="w-8" />}
+
+                          {/* Message bubble */}
+                          <div className="group relative">
+                            <div
+                              className={`relative px-4 py-3 rounded-2xl shadow-sm ${
+                                isUser
+                                  ? "bg-blue-600 text-white rounded-br-md"
+                                  : "bg-slate-700 text-slate-100 rounded-bl-md"
+                              }`}
+                            >
+                              {/* Message content */}
+                              <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                {msg.content}
+                              </div>
+
+                              {/* Copy button */}
+                              <button
+                                onClick={() =>
+                                  copyMessage(msg.content, msg.uuid)
+                                }
+                                className={`absolute -top-2 ${
+                                  isUser ? "-left-2" : "-right-2"
+                                } 
+                                  opacity-0 group-hover:opacity-100 transition-opacity duration-200
+                                  bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white
+                                  rounded-full p-1.5 shadow-lg border border-slate-600`}
+                              >
+                                {copiedMessageId === msg.uuid ? (
+                                  <Check className="w-3 h-3" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Timestamp */}
+                            {!isConsecutive && (
+                              <div
+                                className={`flex items-center mt-1 space-x-1 ${
+                                  isUser ? "justify-end" : "justify-start"
+                                }`}
+                              >
+                                <Clock className="w-3 h-3 text-slate-500" />
+                                <span className="text-xs text-slate-500">
+                                  {formatTime(msg.created_at)}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-slate-600 text-slate-400 px-1.5 py-0"
+                                >
+                                  {msg.role}
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -186,36 +348,24 @@ export function ChatManagement() {
                 variant="outline"
                 className="text-slate-300 border-slate-600"
               >
-                All ({filteredChats.length})
-              </Badge>
-              <Badge
-                variant="outline"
-                className="text-green-400 border-green-600"
-              >
-                Active (
-                {filteredChats.filter((c) => c.status === "active").length})
-              </Badge>
-              <Badge
-                variant="outline"
-                className="text-yellow-400 border-yellow-600"
-              >
-                Pending (
-                {filteredChats.filter((c) => c.status === "pending").length})
+                All ({filteredSessions.length})
               </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredChats.length === 0 ? (
+            {filteredSessions.length === 0 ? (
               <div className="text-center py-8">
+                <MessageSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                 <p className="text-slate-400">No conversations found</p>
               </div>
             ) : (
-              filteredChats.map((chat) => (
+              filteredSessions.map((session, idx) => (
                 <div
-                  key={chat.id}
-                  className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer"
+                  key={session.id}
+                  className="flex items-center justify-between p-4 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer border border-transparent hover:border-slate-600"
+                  onClick={() => openSession(session)}
                 >
                   <div className="flex items-center space-x-4">
                     <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
@@ -223,32 +373,13 @@ export function ChatManagement() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
-                        <h3 className="font-medium text-white">{chat.user}</h3>
-                        <Badge
-                          variant="outline"
-                          className="text-xs text-slate-300 border-slate-600"
-                        >
-                          {chat.role}
-                        </Badge>
-                        <div
-                          className={`w-2 h-2 rounded-full ${getStatusColor(
-                            chat.status
-                          )}`}
-                        />
+                        <h3 className="font-medium text-white">
+                          {session.metadata?.name || `Chat ${idx + 1}`}
+                        </h3>
                       </div>
                       <p className="text-sm text-slate-400 mt-1">
-                        {chat.lastMessage}
+                        Created: {new Date(session.created_at).toLocaleString()}
                       </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-center text-slate-400 text-sm mb-1">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {chat.timestamp}
-                    </div>
-                    <div className="flex items-center text-slate-400 text-sm">
-                      <MessageSquare className="w-3 h-3 mr-1" />
-                      {chat.messages} messages
                     </div>
                   </div>
                 </div>
@@ -260,52 +391,3 @@ export function ChatManagement() {
     </div>
   );
 }
-
-// Fallback demo data
-const demoChats = [
-  {
-    id: "1",
-    user: "User 1",
-    role: "Human",
-    status: "active",
-    lastMessage: "Hello, I need help with my account",
-    timestamp: "2 minutes ago",
-    messages: 12,
-  },
-  {
-    id: "2",
-    user: "User 2",
-    role: "Human",
-    status: "resolved",
-    lastMessage: "Thank you for your help",
-    timestamp: "15 minutes ago",
-    messages: 8,
-  },
-  {
-    id: "3",
-    user: "User 3",
-    role: "Human",
-    status: "pending",
-    lastMessage: "Can you assist me with this issue?",
-    timestamp: "1 hour ago",
-    messages: 5,
-  },
-  {
-    id: "4",
-    user: "User 4",
-    role: "Human",
-    status: "active",
-    lastMessage: "I have a question about the service",
-    timestamp: "2 hours ago",
-    messages: 15,
-  },
-  {
-    id: "5",
-    user: "User 5",
-    role: "Human",
-    status: "resolved",
-    lastMessage: "Everything is working now, thanks!",
-    timestamp: "3 hours ago",
-    messages: 6,
-  },
-];

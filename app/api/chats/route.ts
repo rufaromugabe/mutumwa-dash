@@ -31,30 +31,9 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // Transform the data to match your interface structure
-    // Assuming the Zep API returns an array of messages
-    const messages = Array.isArray(data) ? data : data.messages || [];
-
-    const transformedMessages = messages.map((message: any) => ({
-      uuid: message.uuid || message.id || crypto.randomUUID(),
-      created_at:
-        message.created_at || message.createdAt || new Date().toISOString(),
-      updated_at:
-        message.updated_at || message.updatedAt || new Date().toISOString(),
-      role: message.role || "Human",
-      role_type: message.role_type || message.roleType || "user",
-      content: message.content || "",
-      token_count: message.token_count || message.tokenCount || 0,
-      processed: message.processed || false,
-    }));
-
-    const responseData: MessagesResponse = {
-      messages: transformedMessages,
-      total_count: transformedMessages.length,
-      row_count: transformedMessages.length,
-    };
-
-    return NextResponse.json(responseData);
+    return NextResponse.json(data as MessagesResponse, {
+      status: 200,
+    });
   } catch (error) {
     console.error("Error fetching messages from Zep API:", error);
     return NextResponse.json(
